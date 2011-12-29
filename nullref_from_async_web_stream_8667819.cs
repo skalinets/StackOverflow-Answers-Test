@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using Xunit;
@@ -16,6 +17,7 @@ namespace StackOverflow
         private StreamReader streamResponse;
         private string sUri = "http://yahoo.com";
         private ManualResetEvent e = new ManualResetEvent(false);
+        private CountdownEvent countdownEvent;
 
         [Fact]
         public void Test()
@@ -24,6 +26,23 @@ namespace StackOverflow
             request.Method = "post";
             request.BeginGetRequestStream(GetRequestStreamCallback, request);
             var success = e.WaitOne(5000);
+
+            success.Should().BeTrue();
+
+        }
+
+        [Fact(/*Timeout = 5000*/)]
+        public void Test_ManyThreads()
+        {
+            var initialCount = 20;
+            countdownEvent = new CountdownEvent(initialCount);
+            Enumerable.Repeat(1, initialCount).Select(_ =>
+                                                 {
+                                                     var request = (HttpWebRequest) WebRequest.Create(sUri);
+                                                     request.Method = "post";
+                                                     return request.BeginGetRequestStream(GetRequestStreamCallback, request);
+                                                 }).ToList();
+            var success = countdownEvent.WaitHandle.WaitOne();
 
             success.Should().BeTrue();
 
@@ -60,6 +79,7 @@ namespace StackOverflow
                 response.Close();
             }
             e.Set();
+            countdownEvent.Signal();
         }
 
 //And finally, this is the code where I get the exception reading the stream data:
